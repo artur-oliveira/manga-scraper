@@ -1,0 +1,1 @@
+C:\Users\artur\.virtualenvs\scraper-manga-livre-2xRnSxKk\Scripts\python.exe C:/Users/artur/Documents/Projects/Python/scraper-manga-livre/main.py
