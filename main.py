@@ -1,8 +1,10 @@
 import json
 import requests
 import os
-import urllib3.request
+import http.client
 from bs4 import BeautifulSoup
+
+http.client._MAXHEADERS = 1000
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 '
                          'Safari/537.36',
@@ -27,22 +29,32 @@ def _slugify2(text):
 
 
 class MangaScraper:
-    def __init__(self):
+    def __init__(self, all_mangas=None, all_chapters=None):
         self.base_url = 'https://yesmangas1.com/mangas/page/'
-        self.all_mangas = []
-        self.all_chapters = []
+        self.all_mangas = [] if all_mangas is None else all_mangas
+        self.all_chapters = [] if all_chapters is None else all_chapters
         self.quantidade = 309
         self.browser = requests.session()
         self.browser.headers.update(HEADERS)
 
-    def init(self, is_data_dumped):
-        if is_data_dumped:
-            self.all_mangas = self.get_data('all_mangas')
-            self.all_chapters = self.get_data('all_chapters')
-        else:
-            self.set_all_mangas()
-            self.set_manga_chapters()
+    def init(self, is_data_dumped=False, page=None, download=False):
+        if page is None:
+            if is_data_dumped:
+                self.all_mangas = self.get_data('all_mangas')
+                self.all_chapters = self.get_data('all_chapters')
+            else:
+                self.set_all_mangas()
+                self.set_manga_chapters()
 
+        else:
+            if is_data_dumped:
+                self.all_mangas = self.get_data('all_mangas')[(page - 1) * 30:page * 30]
+                self.all_chapters = self.get_data('all_chapters')[(page - 1) * 30:page * 30]
+            else:
+                self.set_all_mangas(page)
+                self.set_manga_chapters()
+        if download:
+            self.download_all_mangas()
         return self
 
     def set_manga_chapters(self):
@@ -70,10 +82,14 @@ class MangaScraper:
 
             restante -= 1
 
-    def set_all_mangas(self):
+    def set_all_mangas(self, page=None):
         index = 1
+        start = 0
+        if page is not None:
+            self.quantidade = page * 30
+            start = (page - 1) * 30
 
-        for i in range(self.quantidade):
+        for i in range(start, self.quantidade):
             mangas = BeautifulSoup(self.browser.get(self.base_url + str(i + 1)).content, 'html5lib'). \
                 find_all('div', attrs={'class': 'two columns'})
 
@@ -88,23 +104,24 @@ class MangaScraper:
 
             print('PÁGINA: %d ' % (i + 1))
 
-    def download_all_mangas(self, tamanho, paginated):
+    def download_all_mangas(self):
+        print(self.all_chapters)
+
         for manga_chapter in self.all_chapters:
-            if manga_chapter.get('manga_index') < tamanho * paginated:
-                list_chapters = manga_chapter.get('chapters')
+            list_chapters = manga_chapter.get('chapters')
 
-                path = 'C:\\Users\\artur\\Downloads\\MangaScraper\\' + _slugify2(
-                    self.get_manga_by_index(manga_chapter.get('manga_index'))
-                        .get('name')).strip()
+            path = 'C:\\Users\\artur\\Downloads\\MangaScraper\\' + _slugify2(
+                self.get_by_index(manga_chapter.get('manga_index'))
+                    .get('name')).strip()
 
-                if not os.path.exists(path):
-                    os.makedirs(path)
+            if not os.path.exists(path):
+                os.makedirs(path)
 
-                for chapter in list_chapters:
-                    chap_path = path + '\\' + chapter.get('chapter')
+            for chapter in list_chapters:
+                chap_path = path + '\\' + chapter.get('chapter')
 
-                    if not os.path.exists(chap_path):
-                        os.makedirs(chap_path)
+                if not os.path.exists(chap_path):
+                    os.makedirs(chap_path)
 
                     images = BeautifulSoup(requests.get(chapter.get('url'), headers=HEADERS).content, 'html5lib') \
                         .find('div', attrs={'class': 'read-slideshow'}).find_all('img')
@@ -128,10 +145,15 @@ class MangaScraper:
         with open('all_chapters.json', 'w', encoding='utf-8') as f:
             json.dump({'array': self.all_chapters}, f, indent=2)
 
-    def get_manga_by_index(self, index):
-        for item in self.all_mangas:
-            if item.get('index') == index:
-                return item
+    def get_by_index(self, index, class_='manga'):
+        if class_ == 'manga':
+            for item in self.all_mangas:
+                if item.get('index') == index:
+                    return item
+        elif class_ == 'chapter':
+            for item in self.all_chapters:
+                if item.get('manga_index') == index:
+                    return item
 
     @staticmethod
     def get_data(name):
@@ -152,5 +174,4 @@ class MangaScraper:
 
 
 if __name__ == '__main__':
-    sc = MangaScraper().init(True)
-    sc.download_all_mangas(30, 1)
+    MangaScraper().init(True, 1)
